@@ -3,6 +3,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 FROM base AS deps
+ENV NODE_ENV=development
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -17,5 +18,8 @@ RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY .env.example ./
 
+RUN chown -R node:node /app
+
 USER node
+
 CMD ["node", "dist/mcp.js"]
