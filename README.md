@@ -126,6 +126,38 @@ Claude Desktop example:
 }
 ```
 
+## Docker
+
+Build the image:
+
+```bash
+docker build -t github-projects-bridge .
+```
+
+Run the MCP server with an env file:
+
+```bash
+docker run --rm -it --env-file .env github-projects-bridge
+```
+
+Run a CLI command:
+
+```bash
+docker run --rm -it --env-file .env github-projects-bridge node dist/cli.js whoami
+```
+
+Run with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Run a CLI command with Compose:
+
+```bash
+docker compose run --rm github-projects-bridge node dist/cli.js whoami
+```
+
 ## Security
 
 Never paste your PAT into chat. Keep it only in `.env` or your secret manager.
