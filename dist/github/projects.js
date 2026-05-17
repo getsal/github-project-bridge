@@ -12,9 +12,6 @@ function normalizeType(dataType) {
         return "iteration";
     return "unknown";
 }
-function pickProject(result) {
-    return result.user?.projectV2 ?? result.organization?.projectV2 ?? null;
-}
 export async function getViewerLogin(graphql) {
     const data = await graphql(`
     query {
@@ -39,8 +36,9 @@ export async function getRepositoryNodeId(graphql, owner, repo) {
     }
     return data.repository;
 }
-export async function getProjectByNumber(graphql, owner, projectNumber) {
-    const data = await graphql(`
+export async function getProjectByNumber(graphql, owner, projectNumber, ownerType) {
+    const query = ownerType === "user"
+        ? `
       query($owner: String!, $number: Int!) {
         user(login: $owner) {
           projectV2(number: $number) {
@@ -50,6 +48,10 @@ export async function getProjectByNumber(graphql, owner, projectNumber) {
             url
           }
         }
+      }
+    `
+        : `
+      query($owner: String!, $number: Int!) {
         organization(login: $owner) {
           projectV2(number: $number) {
             id
@@ -59,10 +61,11 @@ export async function getProjectByNumber(graphql, owner, projectNumber) {
           }
         }
       }
-    `, { owner, number: projectNumber });
-    const project = pickProject(data);
+    `;
+    const data = await graphql(query, { owner, number: projectNumber });
+    const project = ownerType === "user" ? data.user?.projectV2 ?? null : data.organization?.projectV2 ?? null;
     if (!project) {
-        throw new Error(`Project #${projectNumber} not found for owner ${owner}`);
+        throw new Error(`Project #${projectNumber} not found for ${ownerType} ${owner}`);
     }
     return project;
 }

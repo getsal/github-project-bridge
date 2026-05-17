@@ -54,6 +54,7 @@ async function main() {
             }
             print(`Authenticated login: ${result.login}`);
             print(`Accessible repo: ${result.repo.nameWithOwner} (${result.repo.id})`);
+            print(`Project owner: ${result.projectOwner} (${result.projectOwnerType})`);
             print(`Project: #${result.project.number} ${result.project.title}`);
             print(`Project ID: ${result.project.id}`);
         }
@@ -131,7 +132,7 @@ async function main() {
                 repo: bridge.env.GITHUB_REPO,
                 issue_number: issueNumber,
             });
-            const result = await bridge.addIssueToProject(bridge.env.GITHUB_OWNER, bridge.env.GITHUB_PROJECT_NUMBER, issue.data.node_id);
+            const result = await bridge.addIssueToProject(bridge.projectOwner, bridge.env.GITHUB_PROJECT_NUMBER, issue.data.node_id);
             if (options.json || program.opts().json) {
                 printJson({ itemId: result.itemId });
                 return;

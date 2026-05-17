@@ -137,29 +137,37 @@ export class GitHubProjectsBridge {
     static fromToken(token, baseEnv) {
         return new GitHubProjectsBridge({
             GITHUB_TOKEN: token,
+            GITHUB_PROJECT_OWNER: baseEnv.GITHUB_PROJECT_OWNER,
+            GITHUB_PROJECT_OWNER_TYPE: baseEnv.GITHUB_PROJECT_OWNER_TYPE,
+            GITHUB_PROJECT_NUMBER: baseEnv.GITHUB_PROJECT_NUMBER,
             GITHUB_OWNER: baseEnv.GITHUB_OWNER,
             GITHUB_REPO: baseEnv.GITHUB_REPO,
-            GITHUB_PROJECT_NUMBER: baseEnv.GITHUB_PROJECT_NUMBER,
         });
     }
     get repo() {
         return { owner: this.env.GITHUB_OWNER, repo: this.env.GITHUB_REPO };
     }
+    get projectOwner() {
+        return this.env.GITHUB_PROJECT_OWNER;
+    }
+    get projectOwnerType() {
+        return this.env.GITHUB_PROJECT_OWNER_TYPE;
+    }
     async whoami() {
         const [login, repo, project] = await Promise.all([
             getViewerLogin(this.graphql),
             getRepositoryNodeId(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_REPO),
-            getProjectByNumber(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_PROJECT_NUMBER),
+            getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType),
         ]);
-        return { login, repo, project };
+        return { login, repo, projectOwner: this.projectOwner, projectOwnerType: this.projectOwnerType, project };
     }
-    async listProjectItems(owner = this.env.GITHUB_OWNER, projectNumber = this.env.GITHUB_PROJECT_NUMBER) {
-        const project = await getProjectByNumber(this.graphql, owner, projectNumber);
+    async listProjectItems(owner = this.projectOwner, projectNumber = this.env.GITHUB_PROJECT_NUMBER) {
+        const project = await getProjectByNumber(this.graphql, owner, projectNumber, this.projectOwnerType);
         const items = await listProjectItems(this.graphql, project.id);
         return { project, items };
     }
-    async getConfiguredProject(owner = this.env.GITHUB_OWNER, projectNumber = this.env.GITHUB_PROJECT_NUMBER) {
-        return getProjectByNumber(this.graphql, owner, projectNumber);
+    async getConfiguredProject() {
+        return getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType);
     }
     async getProjectFields(projectId) {
         return getProjectFields(this.graphql, projectId);
@@ -169,7 +177,7 @@ export class GitHubProjectsBridge {
         return createIssue(this.octokit, repo, { title: input.title, body: input.body, labels: input.labels });
     }
     async addIssueToProject(owner, projectNumber, issueNodeId) {
-        const project = await getProjectByNumber(this.graphql, owner, projectNumber);
+        const project = await getProjectByNumber(this.graphql, owner, projectNumber, this.projectOwnerType);
         const result = await addIssueToProject(this.graphql, project.id, issueNodeId);
         return { ...result, project };
     }
@@ -208,7 +216,7 @@ export class GitHubProjectsBridge {
         return commentPullRequestConversation(this.octokit, repo, { number: input.number, body: input.body });
     }
     async importCsv(input) {
-        const project = await getProjectByNumber(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_PROJECT_NUMBER);
+        const project = await getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType);
         const fields = await getProjectFields(this.graphql, project.id);
         const rows = parseCsv(readFileSync(input.file, "utf8"));
         const limit = input.limit ?? 20;

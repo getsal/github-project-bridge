@@ -1,4 +1,4 @@
-import type { ProjectField, ProjectFieldOption, ProjectItemSummary, ProjectSummary } from "../types.js";
+import type { ProjectField, ProjectFieldOption, ProjectItemSummary, ProjectOwnerType, ProjectSummary } from "../types.js";
 
 type GraphqlClient = <T = any>(query: string, variables?: Record<string, unknown>) => Promise<T>;
 
@@ -10,10 +10,6 @@ function normalizeType(dataType: string | undefined): ProjectField["type"] {
   if (value.includes("DATE")) return "date";
   if (value.includes("ITERATION")) return "iteration";
   return "unknown";
-}
-
-function pickProject(result: { user?: { projectV2?: ProjectSummary | null } | null; organization?: { projectV2?: ProjectSummary | null } | null }) {
-  return result.user?.projectV2 ?? result.organization?.projectV2 ?? null;
 }
 
 export async function getViewerLogin(graphql: GraphqlClient): Promise<string> {
@@ -53,12 +49,10 @@ export async function getProjectByNumber(
   graphql: GraphqlClient,
   owner: string,
   projectNumber: number,
+  ownerType: ProjectOwnerType,
 ): Promise<ProjectSummary> {
-  const data: {
-    user?: { projectV2?: ProjectSummary | null } | null;
-    organization?: { projectV2?: ProjectSummary | null } | null;
-  } = await graphql(
-    `
+  const query = ownerType === "user"
+    ? `
       query($owner: String!, $number: Int!) {
         user(login: $owner) {
           projectV2(number: $number) {
@@ -68,6 +62,10 @@ export async function getProjectByNumber(
             url
           }
         }
+      }
+    `
+    : `
+      query($owner: String!, $number: Int!) {
         organization(login: $owner) {
           projectV2(number: $number) {
             id
@@ -77,12 +75,11 @@ export async function getProjectByNumber(
           }
         }
       }
-    `,
-    { owner, number: projectNumber },
-  );
-  const project = pickProject(data);
+    `;
+  const data: { user?: { projectV2?: ProjectSummary | null } | null; organization?: { projectV2?: ProjectSummary | null } | null } = await graphql(query, { owner, number: projectNumber });
+  const project = ownerType === "user" ? data.user?.projectV2 ?? null : data.organization?.projectV2 ?? null;
   if (!project) {
-    throw new Error(`Project #${projectNumber} not found for owner ${owner}`);
+    throw new Error(`Project #${projectNumber} not found for ${ownerType} ${owner}`);
   }
   return project;
 }

@@ -22,6 +22,7 @@ import type {
   IssueCreateResult,
   ProjectField,
   ProjectItemSummary,
+  ProjectOwnerType,
   ProjectSummary,
 } from "../types.js";
 
@@ -36,6 +37,8 @@ export interface ImportCsvOptions {
 export interface WhoAmIResult {
   login: string;
   repo: { id: string; nameWithOwner: string };
+  projectOwner: string;
+  projectOwnerType: ProjectOwnerType;
   project: ProjectSummary;
 }
 
@@ -181,13 +184,15 @@ export class GitHubProjectsBridge {
 
   static fromToken(
     token: string,
-    baseEnv: Pick<GitHubEnv, "GITHUB_OWNER" | "GITHUB_REPO" | "GITHUB_PROJECT_NUMBER">,
+    baseEnv: Pick<GitHubEnv, "GITHUB_PROJECT_OWNER" | "GITHUB_PROJECT_OWNER_TYPE" | "GITHUB_PROJECT_NUMBER" | "GITHUB_OWNER" | "GITHUB_REPO">,
   ): GitHubProjectsBridge {
     return new GitHubProjectsBridge({
       GITHUB_TOKEN: token,
+      GITHUB_PROJECT_OWNER: baseEnv.GITHUB_PROJECT_OWNER,
+      GITHUB_PROJECT_OWNER_TYPE: baseEnv.GITHUB_PROJECT_OWNER_TYPE,
+      GITHUB_PROJECT_NUMBER: baseEnv.GITHUB_PROJECT_NUMBER,
       GITHUB_OWNER: baseEnv.GITHUB_OWNER,
       GITHUB_REPO: baseEnv.GITHUB_REPO,
-      GITHUB_PROJECT_NUMBER: baseEnv.GITHUB_PROJECT_NUMBER,
     });
   }
 
@@ -195,23 +200,31 @@ export class GitHubProjectsBridge {
     return { owner: this.env.GITHUB_OWNER, repo: this.env.GITHUB_REPO };
   }
 
+  get projectOwner(): string {
+    return this.env.GITHUB_PROJECT_OWNER;
+  }
+
+  get projectOwnerType(): ProjectOwnerType {
+    return this.env.GITHUB_PROJECT_OWNER_TYPE;
+  }
+
   async whoami(): Promise<WhoAmIResult> {
     const [login, repo, project] = await Promise.all([
       getViewerLogin(this.graphql),
       getRepositoryNodeId(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_REPO),
-      getProjectByNumber(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_PROJECT_NUMBER),
+      getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType),
     ]);
-    return { login, repo, project };
+    return { login, repo, projectOwner: this.projectOwner, projectOwnerType: this.projectOwnerType, project };
   }
 
-  async listProjectItems(owner = this.env.GITHUB_OWNER, projectNumber = this.env.GITHUB_PROJECT_NUMBER): Promise<ProjectListResult> {
-    const project = await getProjectByNumber(this.graphql, owner, projectNumber);
+  async listProjectItems(owner = this.projectOwner, projectNumber = this.env.GITHUB_PROJECT_NUMBER): Promise<ProjectListResult> {
+    const project = await getProjectByNumber(this.graphql, owner, projectNumber, this.projectOwnerType);
     const items = await listProjectItems(this.graphql, project.id);
     return { project, items };
   }
 
-  async getConfiguredProject(owner = this.env.GITHUB_OWNER, projectNumber = this.env.GITHUB_PROJECT_NUMBER): Promise<ProjectSummary> {
-    return getProjectByNumber(this.graphql, owner, projectNumber);
+  async getConfiguredProject(): Promise<ProjectSummary> {
+    return getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType);
   }
 
   async getProjectFields(projectId: string): Promise<ProjectField[]> {
@@ -224,7 +237,7 @@ export class GitHubProjectsBridge {
   }
 
   async addIssueToProject(owner: string, projectNumber: number, issueNodeId: string): Promise<{ itemId: string; project: ProjectSummary }> {
-    const project = await getProjectByNumber(this.graphql, owner, projectNumber);
+    const project = await getProjectByNumber(this.graphql, owner, projectNumber, this.projectOwnerType);
     const result = await addIssueToProject(this.graphql, project.id, issueNodeId);
     return { ...result, project };
   }
@@ -267,7 +280,7 @@ export class GitHubProjectsBridge {
   }
 
   async importCsv(input: { file: string } & ImportCsvOptions): Promise<ImportReport> {
-    const project = await getProjectByNumber(this.graphql, this.env.GITHUB_OWNER, this.env.GITHUB_PROJECT_NUMBER);
+    const project = await getProjectByNumber(this.graphql, this.projectOwner, this.env.GITHUB_PROJECT_NUMBER, this.projectOwnerType);
     const fields = await getProjectFields(this.graphql, project.id);
     const rows = parseCsv(readFileSync(input.file, "utf8"));
     const limit = input.limit ?? 20;

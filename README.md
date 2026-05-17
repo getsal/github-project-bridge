@@ -44,13 +44,20 @@ Example:
 GITHUB_TOKEN=
 
 # GitHub account or organization that owns the Project v2 board.
-GITHUB_OWNER=YOUR_GITHUB_OWNER
+GITHUB_PROJECT_OWNER=GH_ACCOUNTNAME
 
-# Repository that the bridge operates on.
-GITHUB_REPO=YOUR_GITHUB_REPO
+# Allowed: user | org
+GITHUB_PROJECT_OWNER_TYPE=user
 
 # Project v2 number, for example 1.
 GITHUB_PROJECT_NUMBER=1
+
+# GitHub account that owns the issue repository.
+GITHUB_OWNER=YOUR_GITHUB_OWNER
+
+# Repository that the bridge operates on.
+GITHUB_REPO=<actual repo for issues>
+
 ```
 
 ## CLI
@@ -193,6 +200,14 @@ Smoke test the MCP path:
 2. Start your MCP client with `docker compose run --rm -i github-projects-bridge`.
 3. From the client, call the `whoami` tool.
 4. Confirm the response includes the authenticated login, repo, and Project #1 title.
+
+Smoke test the CLI path:
+
+```bash
+docker compose run --rm -i github-projects-bridge node dist/cli.js whoami
+```
+
+This command should print the authenticated login, the accessible repo, and the resolved Project #1 info.
 
 Build the image with Compose:
 

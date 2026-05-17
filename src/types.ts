@@ -2,12 +2,15 @@ import { z } from "zod";
 
 export const envSchema = z.object({
   GITHUB_TOKEN: z.string({ required_error: "GITHUB_TOKEN is required in .env" }).min(1, "GITHUB_TOKEN is required in .env"),
+  GITHUB_PROJECT_OWNER: z.string({ required_error: "GITHUB_PROJECT_OWNER is required in .env" }).min(1, "GITHUB_PROJECT_OWNER is required in .env"),
+  GITHUB_PROJECT_OWNER_TYPE: z.enum(["user", "org"], { required_error: "GITHUB_PROJECT_OWNER_TYPE is required in .env" }),
+  GITHUB_PROJECT_NUMBER: z.coerce.number({ required_error: "GITHUB_PROJECT_NUMBER is required in .env" }).int().positive(),
   GITHUB_OWNER: z.string({ required_error: "GITHUB_OWNER is required in .env" }).min(1, "GITHUB_OWNER is required in .env"),
   GITHUB_REPO: z.string({ required_error: "GITHUB_REPO is required in .env" }).min(1, "GITHUB_REPO is required in .env"),
-  GITHUB_PROJECT_NUMBER: z.coerce.number({ required_error: "GITHUB_PROJECT_NUMBER is required in .env" }).int().positive(),
 });
 
 export type GitHubEnv = z.infer<typeof envSchema>;
+export type ProjectOwnerType = GitHubEnv["GITHUB_PROJECT_OWNER_TYPE"];
 
 export type FieldType = "text" | "single_select" | "number" | "date" | "iteration" | "unknown";
 
