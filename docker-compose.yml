@@ -7,6 +7,4 @@ services:
     env_file:
       - path: .env
         required: false
-    stdin_open: true
-    tty: true
     command: ["node", "dist/mcp.js"]

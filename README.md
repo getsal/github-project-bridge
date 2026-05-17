@@ -40,9 +40,16 @@ Fine-grained PAT:
 Example:
 
 ```env
+# GitHub personal access token with Projects and repo permissions.
 GITHUB_TOKEN=
+
+# GitHub account or organization that owns the Project v2 board.
 GITHUB_OWNER=YOUR_GITHUB_OWNER
+
+# Repository that the bridge operates on.
 GITHUB_REPO=YOUR_GITHUB_REPO
+
+# Project v2 number, for example 1.
 GITHUB_PROJECT_NUMBER=1
 ```
 
@@ -126,6 +133,34 @@ Claude Desktop example:
 }
 ```
 
+Codex example:
+
+```json
+{
+  "mcpServers": {
+    "github-projects-bridge": {
+      "command": "docker",
+      "args": ["compose", "run", "--rm", "-i", "github-projects-bridge"],
+      "cwd": "/path/to/github-projects-bridge"
+    }
+  }
+}
+```
+
+OpenClaw example:
+
+```json
+{
+  "mcpServers": {
+    "github-projects-bridge": {
+      "command": "docker",
+      "args": ["compose", "run", "--rm", "-i", "github-projects-bridge"],
+      "cwd": "/path/to/github-projects-bridge"
+    }
+  }
+}
+```
+
 ## Docker
 
 Build the image:
@@ -146,17 +181,32 @@ Run a CLI command:
 docker run --rm -it --env-file .env github-projects-bridge node dist/cli.js whoami
 ```
 
-Run with Docker Compose:
+Run the stdio MCP server with Docker Compose:
 
 ```bash
-docker compose up --build
+docker compose run --rm -i github-projects-bridge
+```
+
+Smoke test the MCP path:
+
+1. Build the image with `docker compose build`.
+2. Start your MCP client with `docker compose run --rm -i github-projects-bridge`.
+3. From the client, call the `whoami` tool.
+4. Confirm the response includes the authenticated login, repo, and Project #1 title.
+
+Build the image with Compose:
+
+```bash
+docker compose build
 ```
 
 Run a CLI command with Compose:
 
 ```bash
-docker compose run --rm github-projects-bridge node dist/cli.js whoami
+docker compose run --rm -i github-projects-bridge node dist/cli.js whoami
 ```
+
+This server uses `stdio`, so it should be started by the MCP client, not left running as a long-lived Compose daemon.
 
 ## Security
 
