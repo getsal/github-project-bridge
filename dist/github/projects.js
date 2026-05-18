@@ -10,7 +10,7 @@ function normalizeType(dataType) {
         return "date";
     if (value.includes("ITERATION"))
         return "iteration";
-    return "unknown";
+    return "unsupported";
 }
 export async function getViewerLogin(graphql) {
     const data = await graphql(`
@@ -80,9 +80,11 @@ export async function getProjectFields(graphql, projectId) {
               fields(first: 100, after: $after) {
                 nodes {
                   __typename
-                  id
-                  name
-                  dataType
+                  ... on ProjectV2FieldCommon {
+                    id
+                    name
+                    dataType
+                  }
                   ... on ProjectV2SingleSelectField {
                     options {
                       id
@@ -264,11 +266,6 @@ export async function addIssueToProject(graphql, projectId, issueNodeId) {
     return { itemId: item.id };
 }
 export async function setProjectFieldValue(graphql, input) {
-    const value = typeof input.value === "object" && input.value !== null
-        ? input.value
-        : typeof input.value === "number"
-            ? { number: input.value }
-            : { text: input.value };
     const data = await graphql(`
       mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!) {
         updateProjectV2ItemFieldValue(input: {
@@ -282,7 +279,7 @@ export async function setProjectFieldValue(graphql, input) {
           }
         }
       }
-    `, { projectId: input.projectId, itemId: input.itemId, fieldId: input.fieldId, value });
+    `, { projectId: input.projectId, itemId: input.itemId, fieldId: input.fieldId, value: input.value });
     const item = data.updateProjectV2ItemFieldValue.projectV2Item;
     if (!item) {
         throw new Error("Project field update did not return an item");
@@ -296,4 +293,27 @@ export function findFieldByName(fields, name) {
 export function findSingleSelectOption(field, value) {
     const normalized = value.trim().toLowerCase();
     return field.options.find((option) => option.name.trim().toLowerCase() === normalized) ?? null;
+}
+export function resolveProjectFieldValue(field, rawValue) {
+    if (field.type === "single_select") {
+        const option = findSingleSelectOption(field, rawValue);
+        if (!option) {
+            throw new Error(`Missing option "${rawValue}" for field "${field.name}"`);
+        }
+        return { singleSelectOptionId: option.id };
+    }
+    if (field.type === "text") {
+        return { text: rawValue };
+    }
+    if (field.type === "number") {
+        const numberValue = Number(rawValue);
+        if (Number.isNaN(numberValue)) {
+            throw new Error(`Invalid number value "${rawValue}" for field "${field.name}"`);
+        }
+        return { number: numberValue };
+    }
+    if (field.type === "date") {
+        return { date: rawValue };
+    }
+    throw new Error(`Unsupported field type "${field.type}" for "${field.name}"`);
 }

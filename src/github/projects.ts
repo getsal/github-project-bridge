@@ -1,4 +1,11 @@
-import type { ProjectField, ProjectFieldOption, ProjectItemSummary, ProjectOwnerType, ProjectSummary } from "../types.js";
+import type {
+  ProjectField,
+  ProjectFieldOption,
+  ProjectFieldValueInput,
+  ProjectItemSummary,
+  ProjectOwnerType,
+  ProjectSummary,
+} from "../types.js";
 
 type GraphqlClient = <T = any>(query: string, variables?: Record<string, unknown>) => Promise<T>;
 
@@ -9,7 +16,7 @@ function normalizeType(dataType: string | undefined): ProjectField["type"] {
   if (value.includes("NUMBER")) return "number";
   if (value.includes("DATE")) return "date";
   if (value.includes("ITERATION")) return "iteration";
-  return "unknown";
+  return "unsupported";
 }
 
 export async function getViewerLogin(graphql: GraphqlClient): Promise<string> {
@@ -112,9 +119,11 @@ export async function getProjectFields(graphql: GraphqlClient, projectId: string
               fields(first: 100, after: $after) {
                 nodes {
                   __typename
-                  id
-                  name
-                  dataType
+                  ... on ProjectV2FieldCommon {
+                    id
+                    name
+                    dataType
+                  }
                   ... on ProjectV2SingleSelectField {
                     options {
                       id
@@ -331,14 +340,8 @@ export async function addIssueToProject(graphql: GraphqlClient, projectId: strin
 
 export async function setProjectFieldValue(
   graphql: GraphqlClient,
-  input: { projectId: string; itemId: string; fieldId: string; value: string | number | { singleSelectOptionId: string } },
+  input: { projectId: string; itemId: string; fieldId: string; value: ProjectFieldValueInput },
 ): Promise<{ projectItemId: string }> {
-  const value =
-    typeof input.value === "object" && input.value !== null
-      ? input.value
-      : typeof input.value === "number"
-        ? { number: input.value }
-        : { text: input.value };
   const data: { updateProjectV2ItemFieldValue: { projectV2Item: { id: string } | null } } = await graphql(
     `
       mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $value: ProjectV2FieldValue!) {
@@ -354,7 +357,7 @@ export async function setProjectFieldValue(
         }
       }
     `,
-    { projectId: input.projectId, itemId: input.itemId, fieldId: input.fieldId, value },
+    { projectId: input.projectId, itemId: input.itemId, fieldId: input.fieldId, value: input.value },
   );
   const item = data.updateProjectV2ItemFieldValue.projectV2Item;
   if (!item) {
@@ -371,4 +374,28 @@ export function findFieldByName(fields: ProjectField[], name: string): ProjectFi
 export function findSingleSelectOption(field: ProjectField, value: string): ProjectFieldOption | null {
   const normalized = value.trim().toLowerCase();
   return field.options.find((option) => option.name.trim().toLowerCase() === normalized) ?? null;
+}
+
+export function resolveProjectFieldValue(field: ProjectField, rawValue: string): ProjectFieldValueInput {
+  if (field.type === "single_select") {
+    const option = findSingleSelectOption(field, rawValue);
+    if (!option) {
+      throw new Error(`Missing option "${rawValue}" for field "${field.name}"`);
+    }
+    return { singleSelectOptionId: option.id };
+  }
+  if (field.type === "text") {
+    return { text: rawValue };
+  }
+  if (field.type === "number") {
+    const numberValue = Number(rawValue);
+    if (Number.isNaN(numberValue)) {
+      throw new Error(`Invalid number value "${rawValue}" for field "${field.name}"`);
+    }
+    return { number: numberValue };
+  }
+  if (field.type === "date") {
+    return { date: rawValue };
+  }
+  throw new Error(`Unsupported field type "${field.type}" for "${field.name}"`);
 }

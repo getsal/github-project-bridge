@@ -5,12 +5,12 @@ import { commentPullRequestConversation } from "../github/prs.js";
 import {
   addIssueToProject,
   findFieldByName,
-  findSingleSelectOption,
   getProjectByNumber,
   getProjectFields,
   getRepositoryNodeId,
   getViewerLogin,
   listProjectItems,
+  resolveProjectFieldValue,
   setProjectFieldValue,
 } from "../github/projects.js";
 import type {
@@ -158,14 +158,6 @@ function buildIssueBody(metadata: { priority?: string; area?: string; agent?: st
   ].join("\n");
 }
 
-function inferSingleSelectValue(field: ProjectField, value: string): { value: { singleSelectOptionId: string } | null; warning?: string } {
-  const option = findSingleSelectOption(field, value);
-  if (!option) {
-    return { value: null, warning: `Missing option "${value}" for field "${field.name}"` };
-  }
-  return { value: { singleSelectOptionId: option.id } };
-}
-
 export class GitHubProjectsBridge {
   readonly env: GitHubEnv;
   readonly graphql: ReturnType<typeof createGitHubClients>["graphql"];
@@ -248,19 +240,7 @@ export class GitHubProjectsBridge {
     if (!field) {
       throw new Error(`Field not found: ${input.fieldName}`);
     }
-    const payload = field.type === "single_select" ? inferSingleSelectValue(field, input.value) : null;
-    if (field.type === "single_select") {
-      if (!payload?.value) {
-        throw new Error(payload?.warning ?? `Missing option for ${field.name}`);
-      }
-      return setProjectFieldValue(this.graphql, {
-        projectId: input.projectId,
-        itemId: input.itemId,
-        fieldId: field.id,
-        value: payload.value,
-      });
-    }
-    const value = field.type === "number" ? Number(input.value) : input.value;
+    const value = resolveProjectFieldValue(field, input.value);
     return setProjectFieldValue(this.graphql, {
       projectId: input.projectId,
       itemId: input.itemId,
@@ -351,35 +331,22 @@ export class GitHubProjectsBridge {
           if (statusValue) fieldAssignments.push({ fieldName: "Status", value: statusValue });
 
           for (const assignment of fieldAssignments) {
-            const field = findFieldByName(fields, assignment.fieldName);
-            if (!field) {
-              rowResult.warnings.push(`Missing field "${assignment.fieldName}"`);
-              continue;
-            }
-            if (field.type === "single_select") {
-              const selection = inferSingleSelectValue(field, assignment.value);
-              if (!selection.value) {
-                rowResult.warnings.push(selection.warning ?? `Missing option for ${assignment.fieldName}`);
+            try {
+              const field = findFieldByName(fields, assignment.fieldName);
+              if (!field) {
+                rowResult.warnings.push(`Missing field "${assignment.fieldName}"`);
                 continue;
               }
+              const value = resolveProjectFieldValue(field, assignment.value);
               await setProjectFieldValue(this.graphql, {
                 projectId: project.id,
                 itemId: added.itemId,
                 fieldId: field.id,
-                value: selection.value,
+                value,
               });
-              continue;
+            } catch (error) {
+              rowResult.warnings.push(formatGitHubError(error));
             }
-            if (field.type === "text") {
-              await setProjectFieldValue(this.graphql, {
-                projectId: project.id,
-                itemId: added.itemId,
-                fieldId: field.id,
-                value: assignment.value,
-              });
-              continue;
-            }
-            rowResult.warnings.push(`Unsupported field type "${field.type}" for "${assignment.fieldName}"`);
           }
           report.created += 1;
           report.rows.push(rowResult);

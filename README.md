@@ -98,6 +98,12 @@ npm run cli -- project:set-field \
   --value "In Progress"
 ```
 
+If you change Project v2 field handling, rebuild the Docker image before rerunning this command:
+
+```bash
+docker compose build
+```
+
 Import CSV:
 
 ```bash

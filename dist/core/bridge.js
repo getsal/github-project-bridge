@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createGitHubClients, formatGitHubError, loadGitHubEnv, parseRepoRef } from "../github/client.js";
 import { createIssue, commentIssue, findOpenIssueByExactTitle } from "../github/issues.js";
 import { commentPullRequestConversation } from "../github/prs.js";
-import { addIssueToProject, findFieldByName, findSingleSelectOption, getProjectByNumber, getProjectFields, getRepositoryNodeId, getViewerLogin, listProjectItems, setProjectFieldValue, } from "../github/projects.js";
+import { addIssueToProject, findFieldByName, getProjectByNumber, getProjectFields, getRepositoryNodeId, getViewerLogin, listProjectItems, resolveProjectFieldValue, setProjectFieldValue, } from "../github/projects.js";
 function parseLabels(value) {
     return (value ?? "")
         .split(/[;,|]/)
@@ -114,13 +114,6 @@ function buildIssueBody(metadata) {
         "- Source: Notion CSV import",
     ].join("\n");
 }
-function inferSingleSelectValue(field, value) {
-    const option = findSingleSelectOption(field, value);
-    if (!option) {
-        return { value: null, warning: `Missing option "${value}" for field "${field.name}"` };
-    }
-    return { value: { singleSelectOptionId: option.id } };
-}
 export class GitHubProjectsBridge {
     env;
     graphql;
@@ -187,19 +180,7 @@ export class GitHubProjectsBridge {
         if (!field) {
             throw new Error(`Field not found: ${input.fieldName}`);
         }
-        const payload = field.type === "single_select" ? inferSingleSelectValue(field, input.value) : null;
-        if (field.type === "single_select") {
-            if (!payload?.value) {
-                throw new Error(payload?.warning ?? `Missing option for ${field.name}`);
-            }
-            return setProjectFieldValue(this.graphql, {
-                projectId: input.projectId,
-                itemId: input.itemId,
-                fieldId: field.id,
-                value: payload.value,
-            });
-        }
-        const value = field.type === "number" ? Number(input.value) : input.value;
+        const value = resolveProjectFieldValue(field, input.value);
         return setProjectFieldValue(this.graphql, {
             projectId: input.projectId,
             itemId: input.itemId,
@@ -284,35 +265,23 @@ export class GitHubProjectsBridge {
                     if (statusValue)
                         fieldAssignments.push({ fieldName: "Status", value: statusValue });
                     for (const assignment of fieldAssignments) {
-                        const field = findFieldByName(fields, assignment.fieldName);
-                        if (!field) {
-                            rowResult.warnings.push(`Missing field "${assignment.fieldName}"`);
-                            continue;
-                        }
-                        if (field.type === "single_select") {
-                            const selection = inferSingleSelectValue(field, assignment.value);
-                            if (!selection.value) {
-                                rowResult.warnings.push(selection.warning ?? `Missing option for ${assignment.fieldName}`);
+                        try {
+                            const field = findFieldByName(fields, assignment.fieldName);
+                            if (!field) {
+                                rowResult.warnings.push(`Missing field "${assignment.fieldName}"`);
                                 continue;
                             }
+                            const value = resolveProjectFieldValue(field, assignment.value);
                             await setProjectFieldValue(this.graphql, {
                                 projectId: project.id,
                                 itemId: added.itemId,
                                 fieldId: field.id,
-                                value: selection.value,
+                                value,
                             });
-                            continue;
                         }
-                        if (field.type === "text") {
-                            await setProjectFieldValue(this.graphql, {
-                                projectId: project.id,
-                                itemId: added.itemId,
-                                fieldId: field.id,
-                                value: assignment.value,
-                            });
-                            continue;
+                        catch (error) {
+                            rowResult.warnings.push(formatGitHubError(error));
                         }
-                        rowResult.warnings.push(`Unsupported field type "${field.type}" for "${assignment.fieldName}"`);
                     }
                     report.created += 1;
                     report.rows.push(rowResult);

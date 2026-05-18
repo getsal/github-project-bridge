@@ -12,7 +12,12 @@ export const envSchema = z.object({
 export type GitHubEnv = z.infer<typeof envSchema>;
 export type ProjectOwnerType = GitHubEnv["GITHUB_PROJECT_OWNER_TYPE"];
 
-export type FieldType = "text" | "single_select" | "number" | "date" | "iteration" | "unknown";
+export type FieldType = "text" | "single_select" | "number" | "date" | "iteration" | "unsupported";
+export type ProjectFieldValueInput =
+  | { singleSelectOptionId: string }
+  | { text: string }
+  | { number: number }
+  | { date: string };
 
 export interface ProjectFieldOption {
   id: string;
@@ -22,8 +27,8 @@ export interface ProjectFieldOption {
 export interface ProjectField {
   id: string;
   name: string;
-  dataType: string;
   type: FieldType;
+  dataType: string;
   options: ProjectFieldOption[];
 }
 
